@@ -122,7 +122,7 @@ def silent_print_pdf(pdf_path, printer_name, copies=1, duplex=1, quality='normal
             printable_area = hdc.GetDeviceCaps(win32con.HORZRES), hdc.GetDeviceCaps(win32con.VERTRES)
 
             for copy_num in range(copies):
-                hdc.StartDoc("PDF Print")
+                hdc.StartDoc("PDF Silent Print")
 
                 for page_num in range(len(pdf_doc)):
                     hdc.StartPage()
