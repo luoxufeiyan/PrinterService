@@ -96,71 +96,86 @@ def create_simple_printer_icon():
     
     return image
 
-def silent_print_pdf(pdf_path, printer_name, copies=1, duplex=1):
+def silent_print_pdf(pdf_path, printer_name, copies=1, duplex=1, quality='normal', scaling='fit'):
     if not PYMUPDF_AVAILABLE:
         raise Exception("PyMuPDF未安装，无法使用静默打印")
-    
+
     if not os.path.exists(pdf_path):
         raise Exception(f"PDF文件不存在: {pdf_path}")
-    
+
     try:
+        if quality == 'high':
+            dpi = 600
+        elif quality == 'draft':
+            dpi = 150
+        else:
+            dpi = 300
+
         pdf_doc = fitz.open(pdf_path)
         hprinter = win32print.OpenPrinter(printer_name)
-        
+
         try:
-            printer_info = win32print.GetPrinter(hprinter, 2)
+            win32print.GetPrinter(hprinter, 2)
             hdc = win32ui.CreateDC()
             hdc.CreatePrinterDC(printer_name)
-            
+
             printable_area = hdc.GetDeviceCaps(win32con.HORZRES), hdc.GetDeviceCaps(win32con.VERTRES)
-            printer_size = hdc.GetDeviceCaps(win32con.PHYSICALWIDTH), hdc.GetDeviceCaps(win32con.PHYSICALHEIGHT)
-            printer_margins = hdc.GetDeviceCaps(win32con.PHYSICALOFFSETX), hdc.GetDeviceCaps(win32con.PHYSICALOFFSETY)
-            
+
             for copy_num in range(copies):
-                hdc.StartDoc("PDF Silent Print")
-                
+                hdc.StartDoc("PDF Print")
+
                 for page_num in range(len(pdf_doc)):
                     hdc.StartPage()
-                    
+
                     page = pdf_doc[page_num]
-                    mat = fitz.Matrix(2.0, 2.0)
-                    pix = page.get_pixmap(matrix=mat)
-                    
+
+                    zoom = dpi / 72.0
+                    mat = fitz.Matrix(zoom, zoom)
+                    pix = page.get_pixmap(matrix=mat, alpha=False)
+
                     img_data = pix.tobytes("ppm")
                     img = PILImage.open(io.BytesIO(img_data))
-                    
+
                     img_width, img_height = img.size
-                    scale_x = printable_area[0] / img_width
-                    scale_y = printable_area[1] / img_height
-                    scale = min(scale_x, scale_y) * 0.9
-                    
-                    scaled_width = int(img_width * scale)
-                    scaled_height = int(img_height * scale)
-                    x = (printable_area[0] - scaled_width) // 2 + printer_margins[0]
-                    y = (printable_area[1] - scaled_height) // 2 + printer_margins[1]
-                    
-                    if scale != 1.0:
-                        img = img.resize((scaled_width, scaled_height), PILImage.Resampling.LANCZOS)
-                    
-                    dib = ImageWin.Dib(img)
-                    dib.draw(hdc.GetHandleOutput(), (x, y, x + scaled_width, y + scaled_height))
-                    
+
+                    if scaling == 'fit':
+                        scale_x = printable_area[0] / img_width
+                        scale_y = printable_area[1] / img_height
+                        scale = min(scale_x, scale_y)
+
+                        scaled_width = int(img_width * scale)
+                        scaled_height = int(img_height * scale)
+                        x = (printable_area[0] - scaled_width) // 2
+                        y = (printable_area[1] - scaled_height) // 2
+
+                        if scale != 1.0:
+                            img = img.resize((scaled_width, scaled_height), PILImage.Resampling.LANCZOS)
+
+                        dib = ImageWin.Dib(img)
+                        dib.draw(hdc.GetHandleOutput(), (x, y, x + scaled_width, y + scaled_height))
+                    else:
+                        x = (printable_area[0] - img_width) // 2
+                        y = (printable_area[1] - img_height) // 2
+
+                        dib = ImageWin.Dib(img)
+                        dib.draw(hdc.GetHandleOutput(), (x, y, x + img_width, y + img_height))
+
                     hdc.EndPage()
-                
+
                 hdc.EndDoc()
-            
+
             return True
-            
+
         finally:
             try:
                 hdc.DeleteDC()
-            except:
+            except Exception:
                 pass
             win32print.ClosePrinter(hprinter)
             pdf_doc.close()
-            
+
     except Exception as e:
-        raise Exception(f"静默打印失败: {str(e)}")
+        raise Exception(f"打印失败: {str(e)}")
 
 def fallback_print_pdf(pdf_path, printer_name, copies=1):
     try:
@@ -629,17 +644,18 @@ def print_single():
     duplex = data.get('duplex', 1)
     paper_size = data.get('paper_size', 'A4')
     quality = data.get('quality', 'normal')
-    
+    scaling = data.get('scaling', 'fit')
+
     try:
         name, ext = os.path.splitext(filename)
         pdf_name = f"{name}.pdf"
         pdf_path = os.path.join(PDF_FOLDER, pdf_name)
-        
+
         if not os.path.exists(pdf_path):
             return jsonify({'success': False, 'message': '文件未转换为PDF，无法静默打印'})
-        
+
         try:
-            silent_print_pdf(pdf_path, printer, copies, duplex)
+            silent_print_pdf(pdf_path, printer, copies, duplex, quality, scaling)
             log_print(filename, printer, copies, duplex, paper_size, quality, "静默打印成功")
             return jsonify({'success': True, 'message': '静默打印成功'})
         except Exception as e:
@@ -647,10 +663,10 @@ def print_single():
                 error_msg = f"静默打印失败: {str(e)}"
             else:
                 error_msg = "PyMuPDF未安装，无法静默打印"
-            
+
             log_print(filename, printer, copies, duplex, paper_size, quality, error_msg)
             return jsonify({'success': False, 'message': error_msg})
-            
+
     except Exception as e:
         error_msg = f"打印失败: {str(e)}"
         log_print(filename, printer, copies, duplex, paper_size, quality, error_msg)
@@ -664,25 +680,26 @@ def print_all():
     duplex = data.get('duplex', 1)
     paper_size = data.get('paper_size', 'A4')
     quality = data.get('quality', 'normal')
-    
+    scaling = data.get('scaling', 'fit')
+
     if not PYMUPDF_AVAILABLE:
         return jsonify({'success': False, 'message': 'PyMuPDF未安装，无法静默打印'})
-    
+
     try:
         files = get_file_info()
         printed_count = 0
         failed_count = 0
-        
+
         for file_info in files:
             if file_info['pdf_path'] and os.path.exists(file_info['pdf_path']):
                 try:
-                    silent_print_pdf(file_info['pdf_path'], printer, copies, duplex)
+                    silent_print_pdf(file_info['pdf_path'], printer, copies, duplex, quality, scaling)
                     log_print(file_info['name'], printer, copies, duplex, paper_size, quality, "静默批量打印成功")
                     printed_count += 1
                 except Exception as e:
                     log_print(file_info['name'], printer, copies, duplex, paper_size, quality, f"静默批量打印失败: {str(e)}")
                     failed_count += 1
-        
+
         if printed_count > 0:
             message = f'静默批量打印完成，成功打印 {printed_count} 个文件'
             if failed_count > 0:
@@ -690,7 +707,7 @@ def print_all():
             return jsonify({'success': True, 'message': message, 'printed_count': printed_count})
         else:
             return jsonify({'success': False, 'message': '没有可打印的PDF文件'})
-        
+
     except Exception as e:
         return jsonify({'success': False, 'message': f'静默批量打印失败: {str(e)}'})
 
