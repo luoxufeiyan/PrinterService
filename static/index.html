@@ -233,17 +233,32 @@
                         <label class="form-label">选择打印机</label>
                         <select id="printerSelect" class="form-select">
                             {% for p in printers %}
-                                <option value="{{p}}">{{p}}</option>
+                            <option value="{{p}}">{{p}}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-6">
+                    <div class="col-md-6">
                         <label class="form-label">打印份数</label>
                         <input type="number" id="copiesInput" value="1" min="1" max="10" class="form-control">
                     </div>
-                    <div class="col-6">
+                    <div class="col-md-6">
                         <label class="form-label">纸张大小</label>
                         <input type="text" id="paperSizeInput" value="A4" class="form-control">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">打印质量</label>
+                        <select id="qualitySelect" class="form-select">
+                            <option value="draft">草稿</option>
+                            <option value="normal" selected>正常</option>
+                            <option value="high">高质量</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">页面缩放</label>
+                        <select id="scalingSelect" class="form-select">
+                            <option value="fit" selected>适应页面</option>
+                            <option value="actual">实际大小</option>
+                        </select>
                     </div>
                     <div class="col-12">
                         <label class="form-label">单双面</label>
@@ -418,7 +433,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const copies = document.getElementById('copiesInput').value;
         const duplex = document.getElementById('duplexSelect').value;
         const paperSize = document.getElementById('paperSizeInput').value;
-        
+        const quality = document.getElementById('qualitySelect').value;
+        const scaling = document.getElementById('scalingSelect').value;
+
         fetch('/print_single', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -428,7 +445,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 copies: parseInt(copies),
                 duplex: parseInt(duplex),
                 paper_size: paperSize,
-                quality: 'normal'
+                quality: quality,
+                scaling: scaling
             })
         })
         .then(response => response.json())
@@ -444,13 +462,15 @@ document.addEventListener('DOMContentLoaded', function() {
             addLogEntry(`✗ 静默打印失败: ${filename} - 网络错误`);
         });
     }
-    
+
     printAllBtn.addEventListener('click', function() {
         const printer = document.getElementById('printerSelect').value;
         const copies = document.getElementById('copiesInput').value;
         const duplex = document.getElementById('duplexSelect').value;
         const paperSize = document.getElementById('paperSizeInput').value;
-        
+        const quality = document.getElementById('qualitySelect').value;
+        const scaling = document.getElementById('scalingSelect').value;
+
         fetch('/print_all', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -459,7 +479,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 copies: parseInt(copies),
                 duplex: parseInt(duplex),
                 paper_size: paperSize,
-                quality: 'normal'
+                quality: quality,
+                scaling: scaling
             })
         })
         .then(response => response.json())
